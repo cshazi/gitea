@@ -72,7 +72,7 @@ func sessionHandler(session ssh.Session) {
 	args := []string{"serv", "key-" + keyID, "--config=" + setting.CustomConf}
 	log.Trace("SSH: Arguments: %v", args)
 
-	ctx, cancel := context.WithCancel(session.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	gitProtocol := ""
@@ -113,6 +113,15 @@ func sessionHandler(session ssh.Session) {
 	defer stdin.Close()
 
 	process.SetSysProcAttribute(cmd)
+
+	go func(parentContext context.Context, cancel context.CancelFunc) {
+		<-ctx.Done()
+		log.Debug("Parent context terminated: %v", command)
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			log.Debug("Failed to terminate process: ", err)
+		}
+		cancel()
+	}(session.Context(), cancel)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
